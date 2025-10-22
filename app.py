@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import requests
 import os
 from weather_api import WeatherAPI
+from korean_locations import get_popular_korean_locations
 
 # 페이지 설정
 st.set_page_config(
@@ -22,6 +23,9 @@ st.set_page_config(
 
 # API 키 설정 (환경변수 또는 Streamlit secrets 사용)
 API_KEY = st.secrets.get("OPENWEATHER_API_KEY", os.getenv("OPENWEATHER_API_KEY", "bed963520292a4fcf7ee4f9110312c6a"))
+
+# WeatherAPI 인스턴스 생성
+weather_api = WeatherAPI(API_KEY)
 
 # CSS 스타일링
 st.markdown("""
@@ -61,24 +65,89 @@ st.markdown("""
 st.markdown('<h1 class="main-header">🌤️ 실시간 날씨 정보</h1>', unsafe_allow_html=True)
 
 # 사이드바
-st.sidebar.header("🔍 도시 검색")
-city_input = st.sidebar.text_input("도시 이름을 입력하세요:", value="Seoul", placeholder="예: Seoul, Tokyo, London")
+st.sidebar.header("🔍 지역 검색")
 
-# 인기 도시 버튼
-st.sidebar.subheader("🏙️ 인기 도시")
-popular_cities = ["Seoul", "Tokyo", "London", "New York", "Paris", "Sydney"]
-selected_city = None
+# 검색 방법 선택
+search_method = st.sidebar.radio(
+    "검색 방법을 선택하세요:",
+    ["직접 입력", "인기 지역 선택"]
+)
 
-cols = st.sidebar.columns(2)
-for i, city in enumerate(popular_cities):
-    if cols[i % 2].button(city, key=f"city_{city}"):
-        selected_city = city
+if search_method == "직접 입력":
+    city_input = st.sidebar.text_input(
+        "지역명을 입력하세요:", 
+        value="서울", 
+        placeholder="예: 서울, 강남구, 홍대, Busan, Tokyo",
+        help="한글 또는 영문으로 입력하세요. 구/동 단위 검색도 가능합니다."
+    )
+    
+    # 실시간 검색 제안 (입력이 있을 때만)
+    if city_input and len(city_input) > 1:
+        with st.sidebar.expander("💡 검색 제안", expanded=False):
+            search_results = weather_api.search_locations(city_input, limit=5)
+            
+            if search_results:
+                st.write("다음 지역들을 찾았습니다:")
+                for i, result in enumerate(search_results):
+                    if st.button(
+                        f"📍 {result['display_name']}", 
+                        key=f"suggestion_{i}",
+                        help=f"타입: {result['type']}"
+                    ):
+                        city_input = result['korean_name']
+                        st.rerun()
+            else:
+                st.write("검색 결과가 없습니다.")
+else:
+    # 인기 지역 선택
+    popular_locations = get_popular_korean_locations()
+    
+    st.sidebar.subheader("🏙️ 주요 도시")
+    major_cities = popular_locations[:6]
+    cols = st.sidebar.columns(2)
+    selected_city = None
+    
+    for i, city in enumerate(major_cities):
+        if cols[i % 2].button(city, key=f"major_city_{city}"):
+            selected_city = city
+    
+    st.sidebar.subheader("🏘️ 서울 주요 구역")
+    seoul_areas = ["강남구", "홍대", "명동", "잠실동", "압구정동", "이태원"]
+    cols = st.sidebar.columns(2)
+    
+    for i, area in enumerate(seoul_areas):
+        if cols[i % 2].button(area, key=f"seoul_area_{area}"):
+            selected_city = area
+    
+    st.sidebar.subheader("🌊 기타 인기 지역")
+    other_areas = ["해운대구", "제주", "춘천", "강릉", "부산", "대구"]
+    cols = st.sidebar.columns(2)
+    
+    for i, area in enumerate(other_areas):
+        if cols[i % 2].button(area, key=f"other_area_{area}"):
+            selected_city = area
+    
+    city_input = selected_city if selected_city else "서울"
 
-if selected_city:
-    city_input = selected_city
-
-# WeatherAPI 인스턴스 생성
-weather_api = WeatherAPI(API_KEY)
+# 검색 팁 표시
+with st.sidebar.expander("💭 검색 팁", expanded=False):
+    st.markdown("""
+    **한글 검색 예시:**
+    - 도시: 서울, 부산, 대구
+    - 구: 강남구, 서초구, 해운대구  
+    - 동: 역삼동, 홍대, 명동
+    
+    **영문 검색 예시:**
+    - Seoul, Busan, Tokyo
+    - Gangnam-gu, Seoul
+    - Hongdae, Mapo-gu, Seoul
+    
+    **검색 범위:**
+    - 전국 광역시/도
+    - 서울 전체 구/동
+    - 부산, 인천 주요 구역
+    - 전국 주요 시/군
+    """)
 
 # 메인 앱 로직
 if city_input:

@@ -1,9 +1,11 @@
 """
 OpenWeather API를 사용하여 날씨 데이터를 가져오는 모듈
+한글 지역명 검색과 구/동 단위 검색을 지원합니다.
 """
 import requests
 import json
 from datetime import datetime
+from korean_locations import search_korean_location, get_all_korean_locations
 
 class WeatherAPI:
     def __init__(self, api_key):
@@ -12,12 +14,22 @@ class WeatherAPI:
         self.geocoding_url = "http://api.openweathermap.org/geo/1.0"
     
     def get_coordinates(self, city_name):
-        """도시 이름으로 위도, 경도를 가져옵니다."""
+        """도시 이름으로 위도, 경도를 가져옵니다. 한글 검색을 지원합니다."""
         try:
+            # 1. 먼저 한글 지역명 데이터베이스에서 검색
+            english_location = search_korean_location(city_name)
+            if english_location:
+                # 한글 -> 영문 변환된 지역명으로 검색
+                search_query = english_location
+                print(f"한글 지역 '{city_name}' -> 영문 '{english_location}'로 변환하여 검색")
+            else:
+                # 영문 그대로 또는 한글 그대로 검색
+                search_query = city_name
+            
             url = f"{self.geocoding_url}/direct"
             params = {
-                'q': city_name,
-                'limit': 1,
+                'q': search_query,
+                'limit': 5,  # 더 많은 결과를 가져와서 정확도 향상
                 'appid': self.api_key
             }
             response = requests.get(url, params=params)
@@ -25,12 +37,99 @@ class WeatherAPI:
             
             data = response.json()
             if data:
-                return data[0]['lat'], data[0]['lon'], data[0]['country']
+                # 가장 적합한 결과 선택 (첫 번째 결과 우선)
+                best_match = data[0]
+                
+                # 한국 지역인 경우 더 정확한 매칭 시도
+                for location in data:
+                    if location.get('country') == 'KR':
+                        best_match = location
+                        break
+                
+                return best_match['lat'], best_match['lon'], best_match.get('country', 'Unknown')
             else:
+                print(f"'{city_name}' 지역을 찾을 수 없습니다.")
                 return None, None, None
+                
         except Exception as e:
             print(f"좌표 조회 중 오류 발생: {e}")
             return None, None, None
+    
+    def search_locations(self, query, limit=5):
+        """
+        지역 검색 기능 - 한글 검색어로 여러 결과를 반환합니다.
+        자동완성 기능을 위해 사용됩니다.
+        """
+        try:
+            results = []
+            
+            # 1. 한국 지역 데이터베이스에서 검색
+            all_korean_locations = get_all_korean_locations()
+            for korean_name, english_name in all_korean_locations.items():
+                if query.lower() in korean_name.lower():
+                    results.append({
+                        'korean_name': korean_name,
+                        'english_name': english_name,
+                        'display_name': f"{korean_name} ({english_name})",
+                        'type': 'local_db'
+                    })
+            
+            # 2. OpenWeather API에서도 검색 (영문)
+            try:
+                url = f"{self.geocoding_url}/direct"
+                params = {
+                    'q': query,
+                    'limit': limit,
+                    'appid': self.api_key
+                }
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                
+                api_data = response.json()
+                for location in api_data:
+                    location_name = location.get('name', '')
+                    state = location.get('state', '')
+                    country = location.get('country', '')
+                    
+                    display_name = location_name
+                    if state:
+                        display_name += f", {state}"
+                    if country:
+                        display_name += f", {country}"
+                    
+                    results.append({
+                        'korean_name': location_name,
+                        'english_name': location_name,
+                        'display_name': display_name,
+                        'type': 'api',
+                        'lat': location.get('lat'),
+                        'lon': location.get('lon'),
+                        'country': country
+                    })
+            except:
+                pass  # API 검색 실패해도 로컬 DB 결과는 반환
+            
+            # 중복 제거 및 정렬
+            unique_results = []
+            seen_names = set()
+            
+            for result in results:
+                key = result['korean_name'].lower()
+                if key not in seen_names:
+                    seen_names.add(key)
+                    unique_results.append(result)
+            
+            # 한국 지역 우선, 그 다음 길이순 정렬
+            unique_results.sort(key=lambda x: (
+                0 if x['type'] == 'local_db' else 1,
+                len(x['korean_name'])
+            ))
+            
+            return unique_results[:limit]
+            
+        except Exception as e:
+            print(f"지역 검색 중 오류 발생: {e}")
+            return []
     
     def get_current_weather(self, city_name):
         """현재 날씨 정보를 가져옵니다."""
