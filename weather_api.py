@@ -254,6 +254,108 @@ class WeatherAPI:
         
         return local_dt
     
+    def get_current_weather_by_coords(self, lat, lon):
+        """
+        위도, 경도로 현재 날씨 정보를 가져옵니다.
+        현재 위치 기반 날씨 조회에 사용됩니다.
+        """
+        try:
+            url = f"{self.base_url}/weather"
+            params = {
+                'lat': lat,
+                'lon': lon,
+                'appid': self.api_key,
+                'units': 'metric',
+                'lang': 'kr'
+            }
+            
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # 데이터 정리
+            weather_data = {
+                'city': data['name'],
+                'country': data['sys']['country'],
+                'coordinates': {'lat': lat, 'lon': lon},
+                'temperature': round(data['main']['temp']),
+                'feels_like': round(data['main']['feels_like']),
+                'humidity': data['main']['humidity'],
+                'pressure': data['main']['pressure'],
+                'visibility': data.get('visibility', 0) / 1000,
+                'wind_speed': data['wind']['speed'],
+                'wind_direction': data['wind'].get('deg', 0),
+                'weather_main': data['weather'][0]['main'],
+                'weather_description': data['weather'][0]['description'],
+                'weather_icon': data['weather'][0]['icon'],
+                'clouds': data['clouds']['all'],
+                'sunrise': self._convert_utc_to_local(data['sys']['sunrise'], data['timezone']).strftime('%H:%M'),
+                'sunset': self._convert_utc_to_local(data['sys']['sunset'], data['timezone']).strftime('%H:%M'),
+                'timezone': data['timezone'],
+                'dt': self._convert_utc_to_local(data['dt'], data['timezone']).strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+            return weather_data
+            
+        except Exception as e:
+            print(f"좌표 기반 날씨 조회 중 오류 발생: {e}")
+            return None
+    
+    def get_5day_forecast_by_coords(self, lat, lon):
+        """
+        위도, 경도로 5일 날씨 예보를 가져옵니다.
+        현재 위치 기반 예보 조회에 사용됩니다.
+        """
+        try:
+            url = f"{self.base_url}/forecast"
+            params = {
+                'lat': lat,
+                'lon': lon,
+                'appid': self.api_key,
+                'units': 'metric',
+                'lang': 'kr'
+            }
+            
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # 타임존 정보 가져오기
+            timezone_offset = data.get('city', {}).get('timezone', 0)
+            
+            forecast_list = []
+            for item in data['list']:
+                # 지역 시간으로 변환
+                local_dt = self._convert_utc_to_local(item['dt'], timezone_offset)
+                
+                forecast_item = {
+                    'datetime': local_dt.strftime('%Y-%m-%d %H:%M'),
+                    'date': local_dt.strftime('%Y-%m-%d'),
+                    'time': local_dt.strftime('%H:%M'),
+                    'temperature': round(item['main']['temp']),
+                    'feels_like': round(item['main']['feels_like']),
+                    'temp_min': round(item['main']['temp_min']),
+                    'temp_max': round(item['main']['temp_max']),
+                    'humidity': item['main']['humidity'],
+                    'pressure': item['main']['pressure'],
+                    'weather_main': item['weather'][0]['main'],
+                    'weather_description': item['weather'][0]['description'],
+                    'weather_icon': item['weather'][0]['icon'],
+                    'clouds': item['clouds']['all'],
+                    'wind_speed': item['wind']['speed'],
+                    'wind_direction': item['wind'].get('deg', 0),
+                    'pop': item.get('pop', 0) * 100
+                }
+                forecast_list.append(forecast_item)
+            
+            return forecast_list
+            
+        except Exception as e:
+            print(f"좌표 기반 5일 예보 조회 중 오류 발생: {e}")
+            return None
+
     def get_weather_icon_url(self, icon_code):
         """날씨 아이콘 URL을 반환합니다."""
         return f"http://openweathermap.org/img/wn/{icon_code}@2x.png"

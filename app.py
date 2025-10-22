@@ -12,6 +12,7 @@ import requests
 import os
 from weather_api import WeatherAPI
 from korean_locations import get_popular_korean_locations
+from location_service import render_location_component, parse_location_data
 
 # 페이지 설정
 st.set_page_config(
@@ -70,7 +71,7 @@ st.sidebar.header("🔍 지역 검색")
 # 검색 방법 선택
 search_method = st.sidebar.radio(
     "검색 방법을 선택하세요:",
-    ["직접 입력", "인기 지역 선택"]
+    ["직접 입력", "인기 지역 선택", "📍 현재 위치"]
 )
 
 if search_method == "직접 입력":
@@ -98,7 +99,8 @@ if search_method == "직접 입력":
                         st.rerun()
             else:
                 st.write("검색 결과가 없습니다.")
-else:
+
+elif search_method == "인기 지역 선택":
     # 인기 지역 선택
     popular_locations = get_popular_korean_locations()
     
@@ -129,6 +131,41 @@ else:
     
     city_input = selected_city if selected_city else "서울"
 
+elif search_method == "📍 현재 위치":
+    st.sidebar.subheader("🌍 현재 위치 날씨")
+    
+    # 위치 정보 확인
+    lat, lon = parse_location_data()
+    
+    if lat is not None and lon is not None:
+        st.sidebar.success(f"📍 위치 확인: {lat:.4f}, {lon:.4f}")
+        city_input = "current_location"
+        
+        # 세션 스테이트에 좌표 저장
+        st.session_state.current_lat = lat
+        st.session_state.current_lon = lon
+    else:
+        st.sidebar.info("위치 정보를 가져오려면 아래 버튼을 클릭하세요.")
+        
+        # 위치 가져오기 컴포넌트 렌더링
+        render_location_component()
+        
+        # URL 파라미터로 위치 정보가 전달된 경우 처리
+        query_params = st.query_params
+        if "lat" in query_params and "lon" in query_params:
+            try:
+                lat = float(query_params["lat"])
+                lon = float(query_params["lon"])
+                st.session_state.current_lat = lat
+                st.session_state.current_lon = lon
+                st.sidebar.success(f"📍 위치 업데이트: {lat:.4f}, {lon:.4f}")
+                st.rerun()
+            except:
+                st.sidebar.error("위치 정보 파싱 오류")
+        
+        # 기본값으로 서울 설정
+        city_input = "서울"
+
 # 검색 팁 표시
 with st.sidebar.expander("💭 검색 팁", expanded=False):
     st.markdown("""
@@ -147,17 +184,44 @@ with st.sidebar.expander("💭 검색 팁", expanded=False):
     - 서울 전체 구/동
     - 부산, 인천 주요 구역
     - 전국 주요 시/군
+    
+    **📍 현재 위치 사용법:**
+    1. "📍 현재 위치" 선택
+    2. "현재 위치 날씨 보기" 버튼 클릭
+    3. 브라우저에서 위치 접근 허용
+    4. 자동으로 현재 위치 날씨 표시
+    
+    ⚠️ 위치 기능 사용시 주의사항:
+    - HTTPS 연결에서만 정상 작동
+    - 브라우저에서 위치 접근 허용 필요
+    - 정확도는 기기 및 환경에 따라 다름
     """)
 
 # 메인 앱 로직
 if city_input:
-    with st.spinner(f"{city_input}의 날씨 정보를 가져오는 중..."):
-        # 현재 날씨 정보 가져오기
-        current_weather = weather_api.get_current_weather(city_input)
+    # 현재 위치 날씨인지 확인
+    if city_input == "current_location" and hasattr(st.session_state, 'current_lat'):
+        lat = st.session_state.current_lat
+        lon = st.session_state.current_lon
+        
+        with st.spinner(f"현재 위치 ({lat:.4f}, {lon:.4f})의 날씨 정보를 가져오는 중..."):
+            # 좌표 기반 현재 날씨 정보 가져오기
+            current_weather = weather_api.get_current_weather_by_coords(lat, lon)
+    else:
+        with st.spinner(f"{city_input}의 날씨 정보를 가져오는 중..."):
+            # 일반 도시명 기반 현재 날씨 정보 가져오기
+            current_weather = weather_api.get_current_weather(city_input)
         
         if current_weather:
             # 현재 날씨 표시
-            st.success(f"✅ {current_weather['city']}, {current_weather['country']}의 날씨 정보를 성공적으로 가져왔습니다!")
+            location_info = f"{current_weather['city']}, {current_weather['country']}"
+            
+            # 현재 위치인 경우 좌표 정보도 표시
+            if city_input == "current_location" and 'coordinates' in current_weather:
+                coords = current_weather['coordinates']
+                location_info += f" (📍 {coords['lat']:.4f}, {coords['lon']:.4f})"
+            
+            st.success(f"✅ {location_info}의 날씨 정보를 성공적으로 가져왔습니다!")
             
             # 현재 날씨 카드
             col1, col2, col3 = st.columns([2, 1, 1])
@@ -191,7 +255,15 @@ if city_input:
             
             # 5일 예보 가져오기
             st.subheader("📅 5일 날씨 예보")
-            forecast_data = weather_api.get_5day_forecast(city_input)
+            
+            # 현재 위치인지 확인하여 적절한 API 호출
+            if city_input == "current_location" and hasattr(st.session_state, 'current_lat'):
+                forecast_data = weather_api.get_5day_forecast_by_coords(
+                    st.session_state.current_lat, 
+                    st.session_state.current_lon
+                )
+            else:
+                forecast_data = weather_api.get_5day_forecast(city_input)
             
             if forecast_data:
                 # 데이터프레임 생성
