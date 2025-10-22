@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import requests
+import os
 from weather_api import WeatherAPI
 
 # 페이지 설정
@@ -19,8 +20,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# API 키 설정
-API_KEY = "bed963520292a4fcf7ee4f9110312c6a"
+# API 키 설정 (환경변수 또는 Streamlit secrets 사용)
+API_KEY = st.secrets.get("OPENWEATHER_API_KEY", os.getenv("OPENWEATHER_API_KEY", "bed963520292a4fcf7ee4f9110312c6a"))
 
 # CSS 스타일링
 st.markdown("""
@@ -147,7 +148,7 @@ if city_input:
                                      title='시간별 온도 변화',
                                      labels={'temperature': '온도 (°C)', 'datetime': '시간'})
                     fig_temp.update_layout(height=400)
-                    st.plotly_chart(fig_temp, use_container_width=True)
+                    st.plotly_chart(fig_temp, width='stretch')
                 
                 with col2:
                     # 습도 차트
@@ -155,7 +156,7 @@ if city_input:
                                         title='시간별 습도',
                                         labels={'humidity': '습도 (%)', 'time': '시간'})
                     fig_humidity.update_layout(height=400)
-                    st.plotly_chart(fig_humidity, use_container_width=True)
+                    st.plotly_chart(fig_humidity, width='stretch')
                 
                 # 일별 예보 카드
                 st.subheader("📊 일별 예보")
@@ -191,7 +192,7 @@ if city_input:
                                    'pressure', 'weather_description', 'wind_speed', 'pop']].copy()
                     display_df.columns = ['날짜/시간', '온도(°C)', '체감온도(°C)', '습도(%)', 
                                         '기압(hPa)', '날씨', '풍속(m/s)', '강수확률(%)']
-                    st.dataframe(display_df, use_container_width=True)
+                    st.dataframe(display_df, width='stretch')
                 
                 # 풍속과 풍향 정보
                 st.subheader("💨 바람 정보")
@@ -202,14 +203,14 @@ if city_input:
                     fig_wind = px.line(df, x='datetime', y='wind_speed',
                                      title='시간별 풍속 변화',
                                      labels={'wind_speed': '풍속 (m/s)', 'datetime': '시간'})
-                    st.plotly_chart(fig_wind, use_container_width=True)
+                    st.plotly_chart(fig_wind, width='stretch')
                 
                 with col2:
                     # 강수 확률 차트
                     fig_pop = px.bar(df, x='time', y='pop',
                                    title='시간별 강수 확률',
                                    labels={'pop': '강수 확률 (%)', 'time': '시간'})
-                    st.plotly_chart(fig_pop, use_container_width=True)
+                    st.plotly_chart(fig_pop, width='stretch')
             
             else:
                 st.error("5일 예보 데이터를 가져올 수 없습니다.")

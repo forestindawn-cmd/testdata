@@ -74,10 +74,16 @@ API_KEY = os.getenv('OPENWEATHER_API_KEY')
 
 ```
 testdata/
+├── .streamlit/
+│   ├── config.toml     # Streamlit 설정 파일
+│   └── secrets.toml    # 로컬 개발용 비밀 키 (Git에서 제외)
 ├── app.py              # 메인 Streamlit 애플리케이션
 ├── weather_api.py      # OpenWeather API 연동 모듈
 ├── config.py          # 설정 파일
 ├── requirements.txt   # 필요한 패키지 목록
+├── .gitignore         # Git 제외 파일 목록
+├── deploy.sh          # Linux/Mac 배포 스크립트
+├── deploy.bat         # Windows 배포 스크립트
 └── README.md         # 프로젝트 문서
 ```
 
@@ -122,12 +128,43 @@ testdata/
 
 ## 🚀 배포
 
-### Streamlit Cloud
-1. GitHub에 코드 푸시
-2. [Streamlit Cloud](https://streamlit.io/cloud)에서 앱 배포
-3. 환경 변수에 API 키 설정
+### Streamlit Cloud (추천)
 
-### Heroku
+#### 1. GitHub 저장소 준비
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin <your-github-repo-url>
+git push -u origin main
+```
+
+#### 2. Streamlit Cloud에서 배포
+1. [Streamlit Cloud](https://share.streamlit.io/)에 GitHub 계정으로 로그인
+2. "New app" 클릭
+3. GitHub 저장소 선택
+4. Main file path: `app.py`
+5. Advanced settings에서 **Secrets** 설정:
+   ```toml
+   OPENWEATHER_API_KEY = "bed963520292a4fcf7ee4f9110312c6a"
+   ```
+6. "Deploy!" 클릭
+
+#### 3. 배포 후 확인사항
+- 앱이 정상적으로 로드되는지 확인
+- API 호출이 정상적으로 작동하는지 테스트
+- 모든 차트와 기능이 정상 작동하는지 확인
+
+### 로컬 개발환경에서 Secrets 사용
+로컬에서 개발할 때는 `.streamlit/secrets.toml` 파일을 사용:
+```toml
+OPENWEATHER_API_KEY = "your-api-key-here"
+```
+
+### 기타 배포 옵션
+
+#### Heroku
 1. `Procfile` 생성:
 ```
 web: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
@@ -136,8 +173,15 @@ web: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
 2. Heroku CLI로 배포:
 ```bash
 heroku create your-weather-app
+heroku config:set OPENWEATHER_API_KEY="bed963520292a4fcf7ee4f9110312c6a"
 git push heroku main
 ```
+
+#### Railway
+1. [Railway](https://railway.app/)에 연결
+2. GitHub 저장소 연결
+3. 환경 변수 `OPENWEATHER_API_KEY` 설정
+4. 자동 배포
 
 ## 🤝 기여하기
 
