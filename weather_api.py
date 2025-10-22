@@ -4,7 +4,7 @@ OpenWeather API를 사용하여 날씨 데이터를 가져오는 모듈
 """
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from korean_locations import search_korean_location, get_all_korean_locations
 
 class WeatherAPI:
@@ -167,10 +167,10 @@ class WeatherAPI:
                 'weather_description': data['weather'][0]['description'],
                 'weather_icon': data['weather'][0]['icon'],
                 'clouds': data['clouds']['all'],
-                'sunrise': datetime.fromtimestamp(data['sys']['sunrise']).strftime('%H:%M'),
-                'sunset': datetime.fromtimestamp(data['sys']['sunset']).strftime('%H:%M'),
+                'sunrise': self._convert_utc_to_local(data['sys']['sunrise'], data['timezone']).strftime('%H:%M'),
+                'sunset': self._convert_utc_to_local(data['sys']['sunset'], data['timezone']).strftime('%H:%M'),
                 'timezone': data['timezone'],
-                'dt': datetime.fromtimestamp(data['dt']).strftime('%Y-%m-%d %H:%M:%S')
+                'dt': self._convert_utc_to_local(data['dt'], data['timezone']).strftime('%Y-%m-%d %H:%M:%S')
             }
             
             return weather_data
@@ -200,12 +200,18 @@ class WeatherAPI:
             
             data = response.json()
             
+            # 타임존 정보 가져오기 (도시의 타임존 오프셋)
+            timezone_offset = data.get('city', {}).get('timezone', 0)
+            
             forecast_list = []
             for item in data['list']:
+                # 지역 시간으로 변환
+                local_dt = self._convert_utc_to_local(item['dt'], timezone_offset)
+                
                 forecast_item = {
-                    'datetime': datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d %H:%M'),
-                    'date': datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d'),
-                    'time': datetime.fromtimestamp(item['dt']).strftime('%H:%M'),
+                    'datetime': local_dt.strftime('%Y-%m-%d %H:%M'),
+                    'date': local_dt.strftime('%Y-%m-%d'),
+                    'time': local_dt.strftime('%H:%M'),
                     'temperature': round(item['main']['temp']),
                     'feels_like': round(item['main']['feels_like']),
                     'temp_min': round(item['main']['temp_min']),
@@ -227,6 +233,26 @@ class WeatherAPI:
         except Exception as e:
             print(f"5일 예보 조회 중 오류 발생: {e}")
             return None
+    
+    def _convert_utc_to_local(self, utc_timestamp, timezone_offset):
+        """
+        UTC 타임스탬프를 지역 시간으로 변환합니다.
+        
+        Args:
+            utc_timestamp: UTC 타임스탬프 (초)
+            timezone_offset: UTC로부터의 오프셋 (초)
+        
+        Returns:
+            datetime: 지역 시간으로 변환된 datetime 객체
+        """
+        # UTC 시간으로 datetime 객체 생성
+        utc_dt = datetime.fromtimestamp(utc_timestamp, tz=timezone.utc)
+        
+        # 지역 시간으로 변환
+        local_tz = timezone(timedelta(seconds=timezone_offset))
+        local_dt = utc_dt.astimezone(local_tz)
+        
+        return local_dt
     
     def get_weather_icon_url(self, icon_code):
         """날씨 아이콘 URL을 반환합니다."""
